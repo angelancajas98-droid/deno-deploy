@@ -1,8 +1,8 @@
 import { execSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { appendFileSync } from "node:fs";
+import { appendFileSync, realpathSync } from "node:fs";
 import { EOL } from "node:os";
-import { resolve } from "node:path";
+import { isAbsolute, relative, resolve } from "node:path";
 
 function getLatestTag() {
 	try {
@@ -31,9 +31,24 @@ const githubOutput = process.env.GITHUB_OUTPUT;
 if (githubOutput) {
 	const resolvedOutput = resolve(githubOutput);
 	const safeRoot = resolve(process.env.RUNNER_TEMP ?? process.cwd());
-	const safePrefix = safeRoot.endsWith("/") ? safeRoot : `${safeRoot}/`;
 
-	if (resolvedOutput !== safeRoot && !resolvedOutput.startsWith(safePrefix))
+	const canonicalSafeRoot = (() => {
+		try {
+			return realpathSync.native(safeRoot);
+		} catch {
+			return safeRoot;
+		}
+	})();
+	const canonicalOutput = (() => {
+		try {
+			return realpathSync.native(resolvedOutput);
+		} catch {
+			return resolvedOutput;
+		}
+	})();
+
+	const rel = relative(canonicalSafeRoot, canonicalOutput);
+	if (rel === "" ? false : rel.startsWith("..") || isAbsolute(rel))
 		throw new Error("Unsafe GITHUB_OUTPUT path");
 
 	appendFileSync(
